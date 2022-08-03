@@ -48,36 +48,54 @@ async function run() {
         const serviceCollection = client.db("doctors_portal").collection("services");
         const bookingCollection = client.db("doctors_portal").collection("booking");
         const userCollection = client.db("doctors_portal").collection("users");
+        const doctorCollection = client.db("doctors_portal").collection("doctors");
 
 
-        // get multiple data 
-        app.get('/service', async (req, res) => {
-            const query = {}
-            const cursor = serviceCollection.find(query)
-            const services = await cursor.toArray()
-            res.send(services)
-        });
-
-
-        // make an admin api 
-        app.put('/user/admin/:email', verifyJwt, async (req, res) => {
-            const email = req.params.email;
+        // admin api verify 
+        const verifyAdmin = async (req, res, next) => {
             const requester = req.decoded.email;
             const requesterAccount = await userCollection.findOne({ email: requester });
             if (requesterAccount.role === 'admin') {
-                const filter = { email: email };
-                const updateDoc = {
-                    $set: { role: 'admin' }
-                };
-
-                const result = await userCollection.updateOne(filter, updateDoc);
-                res.send(result)
+                next();
             }
             else {
-                res.status(403).send({ message: "Forbidden Access" })
+                res.status(403).send({ message: 'forbidden' });
             }
+        }
 
-        });
+
+        // make an admin api 
+        app.put('/user/admin/:email', verifyJwt, verifyAdmin, async (req, res) => {
+            const email = req.params.email;
+            const filter = { email: email };
+            const updateDoc = {
+                $set: { role: 'admin' },
+            };
+            const result = await userCollection.updateOne(filter, updateDoc);
+            res.send(result);
+        })
+
+
+
+        // make an admin api 
+        // app.put('/user/admin/:email', verifyJwt, async (req, res) => {
+        //     const email = req.params.email;
+        //     const requester = req.decoded.email;
+        //     const requesterAccount = await userCollection.findOne({ email: requester });
+        //     if (requesterAccount.role === 'admin') {
+        //         const filter = { email: email };
+        //         const updateDoc = {
+        //             $set: { role: 'admin' }
+        //         };
+
+        //         const result = await userCollection.updateOne(filter, updateDoc);
+        //         res.send(result)
+        //     }
+        //     else {
+        //         res.status(403).send({ message: "Forbidden Access" })
+        //     }
+
+        // });
 
         // check admin if not then not allow to make an admin 
         app.get('/admin/:email', async (req, res) => {
@@ -87,7 +105,7 @@ async function run() {
             res.send({ admin: isAdmin });
         });
 
-        // user collection ans update if not exist
+        // user collection and  update if not exist
 
         app.put('/user/:email', async (req, res) => {
             const email = req.params.email;
@@ -142,7 +160,16 @@ async function run() {
          * app.put() update a user if exist or if not exist then add the user..
          * app.delete('/booking/:id')
          *  */
-        // get methode booking all
+
+        // get multiple data 
+        app.get('/service', async (req, res) => {
+            const query = {}
+            const cursor = serviceCollection.find(query).project({ name: 1 });
+            const services = await cursor.toArray()
+            res.send(services)
+        });
+        // get method booking all
+
 
         // get all users
 
@@ -185,9 +212,33 @@ async function run() {
             else {
                 return res.send({ success: true, result })
             }
-
-
         });
+
+
+        // doctor collection api 
+
+        // add doctor api 
+        app.post('/doctor', verifyJwt, verifyAdmin, async (req, res) => {
+            const doctor = req.body;
+            const result = await doctorCollection.insertOne(doctor);
+            res.send(result);
+        })
+
+        // manage doctor api and get all doctor
+
+        app.get('/doctor', async (req, res) => {
+            const doctors = await doctorCollection.find().toArray();
+            res.send(doctors);
+        })
+
+        // remove a doctor a api 
+
+        app.delete('/doctor/:email', async (req, res) => {
+            const email = req.params.email;
+            const filter = { email: email }
+            const result = await doctorCollection.deleteOne(filter)
+            res.send(result);
+        })
 
 
 
