@@ -12,7 +12,10 @@ const app = express();
 const port = process.env.PORT || 5000;
 
 // from mongodb 
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+// const { application } = require('express');
+
+const stripe = require('stripe')(process.env.SECRET_KEY);
 
 // middleware 
 app.use(cors());
@@ -27,6 +30,7 @@ const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology:
 // verify token function 
 function verifyJwt(req, res, next) {
     const authHeader = req.headers.authorization;
+
     if (!authHeader) {
         return res.status(403).send({ message: "unAuthorized Access" })
     }
@@ -49,6 +53,7 @@ async function run() {
         const bookingCollection = client.db("doctors_portal").collection("booking");
         const userCollection = client.db("doctors_portal").collection("users");
         const doctorCollection = client.db("doctors_portal").collection("doctors");
+        const paymentCollection = client.db("doctors_portal").collection("payments");
 
 
         // admin api verify 
@@ -62,6 +67,8 @@ async function run() {
                 res.status(403).send({ message: 'forbidden' });
             }
         }
+
+
 
 
         // make an admin api 
@@ -126,6 +133,9 @@ async function run() {
 
             res.send({ result, token })
         });
+
+
+
 
         // get available service 
         app.get('/available', async (req, res) => {
@@ -194,6 +204,51 @@ async function run() {
                 return res.status(403).send({ message: 'Forbidden Access' })
             }
 
+        })
+
+
+        // payment api method
+
+        app.post('/create-payment-intent', async (req, res) => {
+            const service = req.body;
+            const price = service.price;
+            const amount = price * 100;
+            const paymentIntent = await stripe.paymentIntents.create({
+                amount: amount,
+                currency: "usd",
+                payment_method_types: ['card']
+            });
+
+            res.json({ clientSecret: paymentIntent.client_secret })
+        })
+
+        // update payment methode one 
+        app.patch('/booking/:id', verifyJwt, async (req, res) => {
+            const id = req.params.id;
+            const payment = req.body;
+            const filter = { _id: ObjectId(id) }
+            const updateDoc = {
+                $set: {
+                    paid: true,
+                    transactionId: payment.transactionId
+                }
+            }
+            const result = await paymentCollection.insertOne(payment)
+            const updateBooking = await bookingCollection.updateOne(filter, updateDoc);
+            res.send(updateBooking)
+        })
+
+
+
+
+
+        // payment for booking collection api 
+
+        app.get('/booking/:id', verifyJwt, async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: ObjectId(id) }
+            const booking = await bookingCollection.findOne(query);
+            res.json(booking)
         })
 
         // post method && order for (post)
